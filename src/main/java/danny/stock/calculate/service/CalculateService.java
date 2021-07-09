@@ -10,7 +10,10 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -26,29 +29,6 @@ public class CalculateService {
                 .collect(Collectors.toMap(TickerDetail::getTradingDate, TickerDetail::getClose));
     }
 
-    public List<TickerDetail> retrieveData(final String ticker, int timeRange) {
-        long epochSecond = Instant.now().getEpochSecond();
-        BarsLongTerm stockInfo = myClient
-                .getStockInfo(ticker, "D", epochSecond - (long) timeRange * 24 * 60 * 60, epochSecond);
-        ArrayList<TickerDetail> data = stockInfo.getData();
-        int gap = timeRange - data.size();
-        int temp = timeRange;
-        Integer tempDataSize = 0;
-
-        while (gap > 0) {
-            timeRange = timeRange + gap;
-            stockInfo = myClient
-                    .getStockInfo(ticker, "D", epochSecond - (long) (timeRange) * 24 * 60 * 60, epochSecond);
-            data = stockInfo.getData();
-            if (tempDataSize == data.size()) {
-                log.info("This is all {} figures for this ticker {}", data.size(), ticker);
-                break;
-            }
-            tempDataSize = data.size();
-            gap = temp - data.size();
-        }
-        return data;
-    }
 
     public List<TickerDetail> retrieveDataProperly(final String ticker) {
         final long epochSecond = Instant.now().getEpochSecond();
@@ -77,6 +57,7 @@ public class CalculateService {
         }
         return result;
     }
+
     DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
 
     public Map<String, Double> calculateExponentialMovingAverage(final int n, final List<TickerDetail> data) {
@@ -87,7 +68,7 @@ public class CalculateService {
                 .sorted(Comparator.comparing(o -> LocalDate.parse(o.getTradingDate(), formatter)))
                 .collect(Collectors.toList());
         double sumOfFirst = 0.0;
-        for (int i = 0 ; i <= n; i++) {
+        for (int i = 0; i <= n; i++) {
             if (i == n) {
                 double initValue = sumOfFirst / n;
                 result.put(sortedDataByDate.get(n).getTradingDate(), initValue);
