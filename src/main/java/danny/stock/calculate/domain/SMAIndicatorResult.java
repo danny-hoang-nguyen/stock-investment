@@ -13,11 +13,11 @@ import lombok.Setter;
 public class SMAIndicatorResult {
 
   @JsonIgnore
-  private Map<String, Double> sma9IsUptrend;
+  private Map<String, Double> sma9;
   @JsonIgnore
-  private Map<String, Double> sma18IsUptrend;
+  private Map<String, Double> sma18;
   @JsonIgnore
-  private Map<String, Double> sma40IsUptrend;
+  private Map<String, Double> sma40;
 
   private boolean sma9Matched;
   private boolean sma18Matched;

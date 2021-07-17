@@ -3,6 +3,7 @@ package danny.stock.calculate.controller;
 import danny.stock.calculate.domain.SMAIndicatorResult;
 import danny.stock.calculate.service.CalculateService;
 import danny.stock.calculate.service.HelperService;
+import danny.stock.calculate.service.macd.MacdIndicator;
 import danny.stock.calculate.service.sma.SMAIndicator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -26,6 +27,9 @@ public class StockController {
     @Autowired
     private SMAIndicator smaIndicator;
 
+    @Autowired
+    private MacdIndicator macdIndicator;
+
     @GetMapping("/sector/{period}/{sectorId}")
     ResponseEntity<List<SMAIndicatorResult>> getTickerGroupedBySector(@PathVariable String period, @PathVariable Integer sectorId) {
         return ResponseEntity.of(Optional.of(smaIndicator.scanByGroup(period, sectorId)));
@@ -41,6 +45,12 @@ public class StockController {
     SMAIndicatorResult getTickerGroupedBySector(@PathVariable String period,
                                                 @PathVariable String code) {
         return smaIndicator.matchedSMAIndicator(period, code);
+    }
+
+    @GetMapping("/ticker/macd/{n}/{code}")
+    Map<String, Double> calculateEMA(@PathVariable Integer n,
+                                     @PathVariable String code) {
+        return macdIndicator.calculateEMA(n, code);
     }
 }
 

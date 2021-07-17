@@ -15,6 +15,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Slf4j
 @Service
@@ -63,6 +64,7 @@ public class CalculateService {
     public Map<String, Double> calculateExponentialMovingAverage(final int n, final List<TickerDetail> data) {
         int size = data.size();
         HashMap<String, Double> result = new HashMap<>(size, 0.5f);
+        HashMap<String, Double> sortedResult = new HashMap<>(size, 0.5f);
 
         List<TickerDetail> sortedDataByDate = data.stream()
                 .sorted(Comparator.comparing(o -> LocalDate.parse(o.getTradingDate(), formatter)))
@@ -76,13 +78,26 @@ public class CalculateService {
             }
             sumOfFirst = sumOfFirst + sortedDataByDate.get(i).getClose();
         }
-        double k = 2 / (n + 1);
+        double k = 2.0 / (n + 1);
         for (int i = n + 1; i < size; i++) {
             double emaToday = (sortedDataByDate.get(i).getClose() * k) + (result.get(sortedDataByDate.get(i - 1).getTradingDate()) * (1 - k));
             result.put(sortedDataByDate.get(i).getTradingDate(), emaToday);
         }
 
-        return result;
+//        List<String> sortedResultKey = result.keySet().stream().sorted(Comparator.comparing(o -> LocalDate.parse(o, formatter))).collect(Collectors.toList());
+//        int sortedResultSize = sortedResultKey.size();
+//        for (int i = 0; i < sortedResultSize; i++) {
+//            sortedResult.put(sortedResultKey.get(i), result.get(sortedResultKey.get(i)));
+//        }
+
+        result.entrySet().stream()
+                .sorted(Comparator.comparing(o -> LocalDate.parse(o.getKey(), formatter)))
+                .forEach(stringDoubleEntry -> {
+                    sortedResult.put(stringDoubleEntry.getKey(), stringDoubleEntry.getValue());
+                });
+//                .collect(Collectors.toList());
+//                .flatMap(stringDoubleEntry -> Stream.of(result)).collect(Collectors.toList());
+        return sortedResult;
     }
 
 }
