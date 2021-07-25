@@ -20,8 +20,12 @@ public class TickerDetailController {
     @Autowired
     private TickerDetailService tickerDetailService;
 
+    private static final String HALF_YEAR = "182";
+    private static final String DAY = "D";
+
     @GetMapping("/ticker")
-    ResponseEntity<List<TickerDetail>> getTickerDataWithCachedMechanism(@RequestParam(defaultValue = "182") int day, @RequestParam String ticker, @RequestParam(defaultValue = "D") String period) {
+    ResponseEntity<List<TickerDetail>> getTickerDataWithCachedMechanism(@RequestParam(defaultValue = HALF_YEAR) int day,
+                                                                        @RequestParam String ticker, @RequestParam(defaultValue = DAY) String period) {
         return ResponseEntity.of(Optional.of(tickerDetailService.findTickerDetailBetweenTimeRange(day, ticker, period)));
     }
 

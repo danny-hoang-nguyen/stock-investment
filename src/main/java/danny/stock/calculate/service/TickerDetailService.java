@@ -1,7 +1,7 @@
 package danny.stock.calculate.service;
 
 import danny.stock.calculate.client.TcbsClient;
-import danny.stock.calculate.document.TickerDetailDocument;
+import danny.stock.calculate.document.TickerForCalculation;
 import danny.stock.calculate.model.tcb.BarsLongTerm;
 import danny.stock.calculate.model.tcb.TickerDetail;
 import danny.stock.calculate.repository.TickerDetailRepository;
@@ -30,7 +30,7 @@ public class TickerDetailService {
         LocalDateTime to = LocalDateTime.now();
         LocalDateTime from = to.minus(numberOfSessions, ChronoUnit.DAYS);
 
-        List<TickerDetailDocument> existingData = tickerDetailRepository.findByTradingDateBetweenAndPeriodEqualsAndTickerEquals(from, to, period, ticker);
+        List<TickerForCalculation> existingData = tickerDetailRepository.findByTradingDateBetweenAndPeriodEqualsAndTickerEquals(from, to, period, ticker);
         log.info("Existing data = [{}]", existingData.size());
 
         List<TickerDetail> result = existingData.stream().map(this::createFromTickerDetailDocument).collect(Collectors.toList());
@@ -38,7 +38,7 @@ public class TickerDetailService {
 
             LocalDateTime tradingDate = null;
             if (!existingData.isEmpty()) {
-                tradingDate = existingData.stream().max(Comparator.comparing(TickerDetailDocument::getTradingDate)).get().getTradingDate();
+                tradingDate = existingData.stream().max(Comparator.comparing(TickerForCalculation::getTradingDate)).get().getTradingDate();
             } else {
                 tradingDate = from;
                 long fromDateInSecond = Util.convertDateToSecond(tradingDate);
@@ -59,35 +59,35 @@ public class TickerDetailService {
         return result;
     }
 
-    private TickerDetail createFromTickerDetailDocument(final TickerDetailDocument tickerDetailDocument) {
+    private TickerDetail createFromTickerDetailDocument(final TickerForCalculation tickerForCalculation) {
         TickerDetail tickerDetail = new TickerDetail();
-        tickerDetail.setClose(tickerDetailDocument.getClose());
-        tickerDetail.setTradingDate(Util.DATE_TIME_FORMATTER.format(tickerDetailDocument.getTradingDate()));
-        tickerDetail.setCode(tickerDetailDocument.getTicker());
-        tickerDetail.setHigh(tickerDetailDocument.getHigh());
-        tickerDetail.setLow(tickerDetailDocument.getLow());
-        tickerDetail.setOpen(tickerDetailDocument.getOpen());
-        tickerDetail.setVolume(tickerDetailDocument.getVolume());
-        tickerDetail.setCode(tickerDetailDocument.getTicker());
+        tickerDetail.setClose(tickerForCalculation.getClose());
+        tickerDetail.setTradingDate(Util.DATE_TIME_FORMATTER.format(tickerForCalculation.getTradingDate()));
+        tickerDetail.setCode(tickerForCalculation.getTicker());
+        tickerDetail.setHigh(tickerForCalculation.getHigh());
+        tickerDetail.setLow(tickerForCalculation.getLow());
+        tickerDetail.setOpen(tickerForCalculation.getOpen());
+        tickerDetail.setVolume(tickerForCalculation.getVolume());
+        tickerDetail.setCode(tickerForCalculation.getTicker());
         return tickerDetail;
     }
 
-    private TickerDetailDocument createFromTickerDetail(final String ticker, final TickerDetail tickerDetail, final String period) {
-        TickerDetailDocument tickerDetailDocument = new TickerDetailDocument();
-        tickerDetailDocument.setPeriod(period);
-        tickerDetailDocument.setTradingDate(Util.convertStringToTime(tickerDetail.getTradingDate()));
-        tickerDetailDocument.setLow(tickerDetail.getLow());
-        tickerDetailDocument.setHigh(tickerDetail.getHigh());
-        tickerDetailDocument.setOpen(tickerDetail.getOpen());
-        tickerDetailDocument.setClose(tickerDetail.getClose());
-        tickerDetailDocument.setVolume(tickerDetail.getVolume());
-        tickerDetailDocument.setTicker(ticker);
-        return tickerDetailDocument;
+    private TickerForCalculation createFromTickerDetail(final String ticker, final TickerDetail tickerDetail, final String period) {
+        TickerForCalculation tickerForCalculation = new TickerForCalculation();
+        tickerForCalculation.setPeriod(period);
+        tickerForCalculation.setTradingDate(Util.convertStringToTime(tickerDetail.getTradingDate()));
+        tickerForCalculation.setLow(tickerDetail.getLow());
+        tickerForCalculation.setHigh(tickerDetail.getHigh());
+        tickerForCalculation.setOpen(tickerDetail.getOpen());
+        tickerForCalculation.setClose(tickerDetail.getClose());
+        tickerForCalculation.setVolume(tickerDetail.getVolume());
+        tickerForCalculation.setTicker(ticker);
+        return tickerForCalculation;
     }
 
     private void saveNewStockData(String ticker, List<TickerDetail> tickerDetails, String period ) {
         for (TickerDetail tickerDetail: tickerDetails) {
-            TickerDetailDocument fromTickerDetail = createFromTickerDetail(ticker, tickerDetail, period);
+            TickerForCalculation fromTickerDetail = createFromTickerDetail(ticker, tickerDetail, period);
             tickerDetailRepository.save(fromTickerDetail);
         }
     }

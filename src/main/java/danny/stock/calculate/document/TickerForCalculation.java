@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 
 @Document
 @Data
-public class TickerDetailDocument {
+public class TickerForCalculation {
     @Id
     private String id;
     private String group;

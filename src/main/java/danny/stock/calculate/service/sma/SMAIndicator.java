@@ -1,7 +1,7 @@
 package danny.stock.calculate.service.sma;
 
 import danny.stock.calculate.client.TcbsClient;
-import danny.stock.calculate.document.TickerDetailDocument;
+import danny.stock.calculate.document.TickerForCalculation;
 import danny.stock.calculate.domain.SMAIndicatorResult;
 import danny.stock.calculate.model.tcb.TickerDetail;
 import danny.stock.calculate.model.vietstock.Sector;
@@ -9,6 +9,7 @@ import danny.stock.calculate.repository.TickerDetailRepository;
 import danny.stock.calculate.service.CalculateService;
 import danny.stock.calculate.service.HelperService;
 import danny.stock.calculate.service.macd.MacdIndicator;
+import danny.stock.calculate.util.Util;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -20,7 +21,6 @@ import java.nio.channels.FileChannel;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.Map.Entry;
@@ -46,12 +46,12 @@ public class SMAIndicator {
     @Autowired
     private TickerDetailRepository tickerDetailRepository;
 
-    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+//    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
 
 
     private Map<String, Double> getLatestDate(Map<String, Double> inputMap) {
         List<Entry<String, Double>> sortedResult = inputMap.entrySet().stream()
-                .sorted(Comparator.comparing(o -> LocalDate.parse(o.getKey(), formatter)))
+                .sorted(Comparator.comparing(o -> LocalDate.parse(o.getKey(), Util.DATE_TIME_FORMATTER)))
                 .collect(Collectors.toList());
         int size = sortedResult.size();
         Entry<String, Double> stringDoubleEntry = sortedResult.get(size - 1);
@@ -107,7 +107,7 @@ public class SMAIndicator {
 
         List<String> sortedKey = new ArrayList<>();
         generalData.entrySet().stream()
-                .sorted(Comparator.comparing(o -> LocalDate.parse(o.getKey(), formatter)))
+                .sorted(Comparator.comparing(o -> LocalDate.parse(o.getKey(), Util.DATE_TIME_FORMATTER)))
                 .collect(Collectors.toList()).forEach(stringDoubleEntry -> sortedKey.add(stringDoubleEntry.getKey()));
         Collections.reverse(sortedKey);
 
@@ -142,18 +142,18 @@ public class SMAIndicator {
     }
 
     private void saveTickerDetail(TickerDetail td, String ticker, String group, String period) {
-        TickerDetailDocument tickerDetailDocument = new TickerDetailDocument();
-        tickerDetailDocument.setClose(td.getClose());
-        tickerDetailDocument.setOpen(td.getOpen());
-        tickerDetailDocument.setHigh(td.getHigh());
-        tickerDetailDocument.setLow(td.getLow());
-        tickerDetailDocument.setTradingDate(LocalDateTime.parse(td.getTradingDate(), formatter));
-        // TODO start back from here
-        tickerDetailDocument.setTicker(ticker);
-        tickerDetailDocument.setGroup(group);
-        tickerDetailDocument.setPeriod(period);
-        tickerDetailRepository.save(tickerDetailDocument);
+        TickerForCalculation tickerForCalculation = new TickerForCalculation();
+        tickerForCalculation.setClose(td.getClose());
+        tickerForCalculation.setOpen(td.getOpen());
+        tickerForCalculation.setHigh(td.getHigh());
+        tickerForCalculation.setLow(td.getLow());
+        tickerForCalculation.setTradingDate(Util.convertStringToTime(td.getTradingDate()));
+        tickerForCalculation.setTicker(ticker);
+        tickerForCalculation.setGroup(group);
+        tickerForCalculation.setPeriod(period);
+        tickerDetailRepository.save(tickerForCalculation);
     }
+
     public SMAIndicatorResult matchedSMAIndicator(String duration, final Sector sector) {
         List<TickerDetail> data = new ArrayList<>();
         String ticker = sector.getTicker();
@@ -189,7 +189,7 @@ public class SMAIndicator {
 
         List<String> sortedKey = new ArrayList<>();
         generalData.entrySet().stream()
-                .sorted(Comparator.comparing(o -> LocalDate.parse(o.getKey(), formatter)))
+                .sorted(Comparator.comparing(o -> LocalDate.parse(o.getKey(), Util.DATE_TIME_FORMATTER)))
                 .collect(Collectors.toList()).forEach(stringDoubleEntry -> sortedKey.add(stringDoubleEntry.getKey()));
         Collections.reverse(sortedKey);
 
@@ -280,7 +280,7 @@ public class SMAIndicator {
     }
 
     private boolean checkMACD(String date, Map<String, Double> histogram) {
-        LocalDateTime localDateTime = LocalDateTime.parse(date, formatter);
+        LocalDateTime localDateTime = Util.convertStringToTime(date);
         LocalDateTime oneDayBefore = localDateTime.minus(1, ChronoUnit.DAYS);
         LocalDateTime twoDaysBefore = localDateTime.minus(2, ChronoUnit.DAYS);
         LocalDateTime threeDaysBefore = localDateTime.minus(3, ChronoUnit.DAYS);
@@ -290,13 +290,11 @@ public class SMAIndicator {
         int shouldSell = 0;
 
         List<LocalDateTime> localDates = Arrays.asList(oneDayBefore, twoDaysBefore, threeDaysBefore, fourDaysBefore, fiveDaysBefore);
-//        Set<LocalDateTime> collect = localDates.stream().filter(localDateTime1 -> !histogram.containsKey(localDateTime1.format(formatter))).collect(Collectors.toSet());
-
         Double currentHistogram = histogram.get(date);
         if (currentHistogram != null && Math.abs(currentHistogram) > 100) return false;
 
         for (int i = 0; i < 5; i++) {
-            String goodFormat = localDates.get(i).format(formatter);
+            String goodFormat = Util.convertTimeToString(localDates.get(i));
             if (histogram.get(goodFormat) != null) {
                 if (histogram.get(goodFormat) >= 0) {
                     shouldSell++;
