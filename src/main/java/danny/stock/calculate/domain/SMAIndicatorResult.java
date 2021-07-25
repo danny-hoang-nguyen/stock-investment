@@ -32,10 +32,4 @@ public class SMAIndicatorResult {
   private AbstractMap.SimpleEntry<String, Double> buyPrice;
   private Double sellPrice;
   private String code;
-
-  public void determineEnterPrice() {
-    if (!(latestClosePrice.values().stream().findFirst().get() > buyPrice.getValue() - 7000)) {
-      System.out.println(code + "| ENTER ::: " + latestClosePrice.values().stream().findFirst().get());
-    }
-  }
 }

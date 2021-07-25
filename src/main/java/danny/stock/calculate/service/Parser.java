@@ -1,14 +1,18 @@
 package danny.stock.calculate.service;
 
+import danny.stock.calculate.document.TickerFigureDocument;
 import danny.stock.calculate.model.vietstock.TickerFigure;
+import danny.stock.calculate.repository.TickerFigureRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.*;
 
 
@@ -39,13 +43,19 @@ public class Parser {
     private static final String SECTOR = "sector";
     private static final String TICKER = "ticker";
     private static final String HTTP_WWW_COPHIEU_68_VN_CATEGORYLIST_PHP = "http://www.cophieu68.vn/categorylist.php";
-    public static final String HTTP_WWW_COPHIEU_68_VN_CATEGORYLIST_DETAIL_PHP_CATEGORY = "http://www.cophieu68.vn/categorylist_detail.php?category=%5E";
+    private static final String HTTP_WWW_COPHIEU_68_VN_CATEGORYLIST_DETAIL_PHP_CATEGORY = "http://www.cophieu68.vn/categorylist_detail.php?category=%5E";
+    private static final String HTTP_FINANCE_VIETSTOCK_VN = "http://finance.vietstock.vn/";
+    private static final String TAI_CHINH = "/tai-chinh.htm";
 
-    public  List<TickerFigure> retrieveSectorData() throws IOException {
+
+    @Autowired
+    private TickerFigureRepository tickerFigureRepository;
+
+    public List<TickerFigure> retrieveSectorData() throws IOException {
         // [{0=STT, 1=Nhóm Ngành, 2=+/-, 3=EPS, 4=PE, 5=ROA, 6=ROE, 7=Giá TB, 8=Giá SS, 9=P/B, 10=Beta, 11=Tổng KL, 12=NN SởHữu, 13=Vốn TT (Tỷ)}]
         List<String> label = new ArrayList<>();
         Document doc = Jsoup.connect(HTTP_WWW_COPHIEU_68_VN_CATEGORYLIST_PHP).get();
-        Elements newsHeadlines = doc.getElementsByClass("td_bottom3");
+        Elements content = doc.getElementsByClass("td_bottom3");
         Elements headers = doc.getElementsByClass("tr_header");
 
         for (Element headline : headers) {
@@ -60,46 +70,100 @@ public class Parser {
         label.add(1, ticker.text());
 
         int size = label.size();
-        log.info("Header's size [{}]", size);
 
         if (SECTOR_HEADERS.isEmpty()) {
-            for (int i =0; i< size;i++) {
+            for (int i = 0; i < size; i++) {
                 SECTOR_HEADERS.put(i, label.get(i));
             }
         }
-        log.info("Label map [{}]", SECTOR_HEADERS);
 
-//        List<ArrayList<String>> veryFinalResult = new ArrayList<>();
         List<TickerFigure> veryFinalResult = new ArrayList<>();
 
-        for (int i = 0; i < newsHeadlines.size(); i = i + size) {
+        for (int i = 0; i < content.size(); i = i + size) {
             ArrayList<String> strings = new ArrayList<>();
             for (int adx = 0; adx < size; adx++) {
-                if (i + adx == newsHeadlines.size()) break;
-                strings.add(newsHeadlines.get(adx + i).text());
+                if (i + adx == content.size()) break;
+                strings.add(content.get(adx + i).text());
             }
-//            String eps = strings.get(getIdxOfPropertyFromSector(EPS, SECTOR));
             String code = strings.get(getIdxOfPropertyFromSector(NHOM_NGANH, SECTOR));
             String tenNganh = code.substring(code.indexOf("^") + 1);
-            log.info("Ngành [{}]", tenNganh);
-            log.info("=== Enter each ticker section ===");
-            List<String> codesBelongingToThisSector = retrieveTickerDataBasedOnSector(tenNganh);
-            for (String c : codesBelongingToThisSector) {
-                TickerFigure tickerFigure = extractFromVietStock(c);
+
+            log.info("=== Enter sector [{}] ===", tenNganh);
+            List<Vector> tickerAndRoe = getTickerAndRoe(tenNganh);
+            for (Vector c : tickerAndRoe) {
+                String tickerName = (String) c.get(0);
+                TickerFigure tickerFigure = extractFromVietStock(tickerName);
+                tickerFigure.setRoe((Double) c.get(1));
+                tickerFigure.setCode(tickerName);
                 veryFinalResult.add(tickerFigure);
+                TickerFigureDocument fromTickerFigure = createFromTickerFigure(tickerFigure);
+                tickerFigureRepository.save(fromTickerFigure);
             }
-            log.info("=== Exit each ticker section ===");
+            log.info("=== [{}] tickers were processed ===", tickerAndRoe.size());
         }
         return veryFinalResult;
     }
 
-    public  List<String> retrieveTickerDataBasedOnSector(String sector) throws IOException {
+    public List<String> retrieveJustSectorName() throws IOException {
+        // [{0=STT, 1=Nhóm Ngành, 2=+/-, 3=EPS, 4=PE, 5=ROA, 6=ROE, 7=Giá TB, 8=Giá SS, 9=P/B, 10=Beta, 11=Tổng KL, 12=NN SởHữu, 13=Vốn TT (Tỷ)}]
+        List<String> label = new ArrayList<>();
+        Document doc = Jsoup.connect(HTTP_WWW_COPHIEU_68_VN_CATEGORYLIST_PHP).get();
+        Elements content = doc.getElementsByClass("td_bottom3");
+        Elements headers = doc.getElementsByClass("tr_header");
+
+        for (Element headline : headers) {
+            Elements elementsByAttributeValue = headline.getElementsByAttributeValue("align", "right");
+
+            for (Element e : elementsByAttributeValue) {
+                label.add(e.text());
+            }
+        }
+
+        Elements ticker = doc.getElementsByAttributeValue("width", "80");
+        label.add(1, ticker.text());
+
+        int size = label.size();
+
+        if (SECTOR_HEADERS.isEmpty()) {
+            for (int i = 0; i < size; i++) {
+                SECTOR_HEADERS.put(i, label.get(i));
+            }
+        }
+
+        List<String> sectors = new ArrayList<>();
+
+        for (int i = 0; i < content.size(); i = i + size) {
+            ArrayList<String> strings = new ArrayList<>();
+            for (int adx = 0; adx < size; adx++) {
+                if (i + adx == content.size()) break;
+                strings.add(content.get(adx + i).text());
+            }
+            String code = strings.get(getIdxOfPropertyFromSector(NHOM_NGANH, SECTOR));
+            String tenNganh = code.substring(code.indexOf("^") + 1);
+            sectors.add(tenNganh);
+
+//            log.info("=== Enter sector [{}] ===", tenNganh);
+//            List<Vector> tickerAndRoe = getTickerAndRoe(tenNganh);
+//            for (Vector c : tickerAndRoe) {
+//                String tickerName = (String) c.get(0);
+//                TickerFigure tickerFigure = extractFromVietStock(tickerName);
+//                tickerFigure.setRoe((Double) c.get(1));
+//                tickerFigure.setCode(tickerName);
+//                sectors.add(tickerFigure);
+//                TickerFigureDocument fromTickerFigure = createFromTickerFigure(tickerFigure);
+//                tickerFigureRepository.save(fromTickerFigure);
+//            }
+//            log.info("=== [{}] tickers were processed ===", tickerAndRoe.size());
+        }
+        return sectors;
+    }
+
+    public  List<Vector> getTickerAndRoe(String sector) throws IOException {
         // [{0=STT, 1=Mã CK, 2=+/-, 3=EPS, 4=PE, 5=ROA, 6=ROE, 7=Giá SS, 8=P/B, 9=Beta, 10=Tổng KL, 11=NN SởHữu, 12=Vốn TT (Tỷ)}]
-//        inputEPS.replaceAll(",","");
         List<String> label = new ArrayList<>();
         String url = HTTP_WWW_COPHIEU_68_VN_CATEGORYLIST_DETAIL_PHP_CATEGORY + sector;
         Document doc = Jsoup.connect(url).get();
-        Elements newsHeadlines = doc.getElementsByClass("td_bottom");
+        Elements content = doc.getElementsByClass("td_bottom");
         Elements headers = doc.getElementsByClass("tr_header");
 
         for (Element headline : headers) {
@@ -114,42 +178,39 @@ public class Parser {
         label.add(1, ticker.text());
 
         int size = label.size();
-//        log.info("Header's size [{}]", size);
-
 
         if (TICKER_HEADERS.isEmpty()) {
             for (int i =0; i< size;i++) {
                 TICKER_HEADERS.put(i, label.get(i));
             }
         }
-//        log.info("Label map [{}]", TICKER_HEADERS);
 
-        List<ArrayList<String>> veryFinalResult = new ArrayList<>();
-        List<String> codes = new ArrayList<>();
+        List<Vector> tickerAndRoe = new ArrayList<>();
 
         int i1 = label.size();
-        for (int i = 0; i < newsHeadlines.size(); i = i + i1) {
+        for (int i = 0; i < content.size(); i = i + i1) {
             ArrayList<String> strings = new ArrayList<>();
             for (int adx = 0; adx < i1; adx++) {
-                if (i + adx == newsHeadlines.size()) break;
-                String text = newsHeadlines.get(adx + i).text();
+                if (i + adx == content.size()) break;
+                String text = content.get(adx + i).text();
                 strings.add(text);
             }
-//            String eps = strings.get(getIdxOfPropertyFromSector(EPS, TICKER));
             String code = strings.get(getIdxOfPropertyFromSector(MA_CO_PHIEU, TICKER));
             String roe = strings.get(getIdxOfPropertyFromSector(ROE, TICKER));
 
             double roeInNumber = convertROEFromStringToPercentage(roe);
-            log.info("ticker - ROE ::: [{}]  - [{}]", code, roeInNumber);
+//            log.info("ticker - ROE ::: [{}]  - [{}]", code, roeInNumber);
 
-            codes.add(code);
-            veryFinalResult.add(strings);
+            Vector v = new Vector();
+            v.add(0,code);
+            v.add(1,roeInNumber);
+            tickerAndRoe.add(v);
         }
-        return codes;
+        return tickerAndRoe;
     }
 
     public TickerFigure extractFromVietStock(String ticker) throws IOException {
-        Document doc = Jsoup.connect("http://finance.vietstock.vn/"+ ticker+"/tai-chinh.htm").get();
+        Document doc = Jsoup.connect(HTTP_FINANCE_VIETSTOCK_VN + ticker+ TAI_CHINH).get();
         Elements elementsByClass = doc.getElementsByClass("col-xs-12 col-sm-4 col-md-4 col-c-last");
         int movingIndex = 0;
         TickerFigure tickerFigure = new TickerFigure();
@@ -158,10 +219,9 @@ public class Parser {
             Elements key = e.getElementsByClass("p8");
 
             for (Element figure : value) {
-                log.info("Current figure [{}]", figure.text());
+//                log.info("Current figure [{}]", figure.text());
                 String label = key.text().substring(movingIndex, key.text().indexOf(figure.text(), movingIndex));
                 movingIndex = movingIndex + label.length() + figure.text().length();
-//                log.info("label - value [{}] - [{}]", label.trim(), figure.text());
                 createTickerFigure(label.trim(), figure.text(), tickerFigure);
             }
         }
@@ -180,24 +240,43 @@ public class Parser {
     }
 
     private void createTickerFigure(String key, String value, TickerFigure tickerFigure) {
-        switch (key){
+        switch (key) {
             case "EPS*":
-                tickerFigure.setEps(value); break;
+                tickerFigure.setEps(value);
+                break;
 
             case "P/E":
-                tickerFigure.setPOverE(value); break;
-            case "F P/E":
-                tickerFigure.setFAndPOverE(value); break;
+                tickerFigure.setPOverE(value);
+                break;
 
+            case "F P/E":
+                tickerFigure.setFAndPOverE(value);
+                break;
 
             case "BVPS":
-                    tickerFigure.setBvps(value); break;
+                tickerFigure.setBvps(value);
+                break;
 
             case "P/B":
-                tickerFigure.setPOverB(value); break;
+                tickerFigure.setPOverB(value);
+                break;
+
             default:
                 log.info("Not found property [{}]", key);
 
         }
+    }
+
+    private TickerFigureDocument createFromTickerFigure(TickerFigure tickerFigure) {
+        TickerFigureDocument tickerFigureDocument = new TickerFigureDocument();
+        tickerFigureDocument.setBvps(tickerFigure.getBvps());
+        tickerFigureDocument.setCode(tickerFigure.getCode());
+        tickerFigureDocument.setEps(tickerFigure.getEps());
+        tickerFigureDocument.setPOverE(tickerFigure.getPOverE());
+        tickerFigureDocument.setFAndPOverE(tickerFigure.getFAndPOverE());
+        tickerFigureDocument.setPOverB(tickerFigure.getPOverB());
+        tickerFigureDocument.setRoe(tickerFigure.getRoe());
+        tickerFigureDocument.setCreated(LocalDateTime.now());
+        return tickerFigureDocument;
     }
 }

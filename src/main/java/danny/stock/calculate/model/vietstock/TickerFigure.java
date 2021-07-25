@@ -10,5 +10,6 @@ public class TickerFigure {
     private String fAndPOverE;
     private String bvps;
     private String pOverB;
-    private String roe;
+    private Double roe;
+    private String code;
 }
