@@ -16,4 +16,11 @@ public class Sector {
   private String ticker;
   @JsonProperty("_in_")
   private String group;
+  @JsonProperty("_vhtt_")
+  private Double capital;
+
+  @Override
+  public String toString() {
+    return group+"|"+ticker+"|"+capital;
+  }
 }

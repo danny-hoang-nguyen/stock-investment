@@ -9,7 +9,7 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 public class TickerDetail {
-
+  private String code;
   private Double open;
   private Double high;
   private Double low;

@@ -23,8 +23,8 @@ public class TcbsClientConfig {
     return Level.FULL;
   }
 
-  @Bean
-  Retryer retryer() {
-    return Retryer.NEVER_RETRY;
-  }
+//  @Bean
+//  Retryer retryer() {
+//    return Retryer.NEVER_RETRY;
+//  }
 }

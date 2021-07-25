@@ -1,16 +1,27 @@
 package danny.stock.calculate.service.sma;
 
 import danny.stock.calculate.client.TcbsClient;
+import danny.stock.calculate.document.TickerDetailDocument;
 import danny.stock.calculate.domain.SMAIndicatorResult;
 import danny.stock.calculate.model.tcb.TickerDetail;
+import danny.stock.calculate.model.vietstock.Sector;
+import danny.stock.calculate.repository.TickerDetailRepository;
 import danny.stock.calculate.service.CalculateService;
 import danny.stock.calculate.service.HelperService;
+import danny.stock.calculate.service.macd.MacdIndicator;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.Map.Entry;
 import java.util.stream.Collectors;
@@ -28,6 +39,13 @@ public class SMAIndicator {
 
     @Autowired
     private HelperService helperService;
+
+    @Autowired
+    private MacdIndicator macdIndicator;
+
+    @Autowired
+    private TickerDetailRepository tickerDetailRepository;
+
     DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
 
 
@@ -40,6 +58,22 @@ public class SMAIndicator {
         return Map.of(stringDoubleEntry.getKey(), stringDoubleEntry.getValue());
     }
 
+    private void writeToFile(List<SMAIndicatorResult> result) throws IOException {
+        RandomAccessFile stream = new RandomAccessFile("ouput_"+ Instant.now().getEpochSecond(), "rw");
+        FileChannel channel = stream.getChannel();
+
+        for (SMAIndicatorResult s: result) {
+            byte[] bytes = (s.getCode() + "," + s.getBuyPrice().getValue()+"\n").getBytes();
+            ByteBuffer buffer = ByteBuffer.allocate(bytes.length);
+            buffer.put(bytes);
+            buffer.flip();
+            channel.write(buffer);
+
+        }
+        stream.close();
+        channel.close();
+    }
+
     public SMAIndicatorResult matchedSMAIndicator(String duration, final String ticker) {
         List<TickerDetail> data = new ArrayList<>();
         if ("D".equalsIgnoreCase(duration)) {
@@ -47,7 +81,7 @@ public class SMAIndicator {
         } else if ("W".equalsIgnoreCase(duration)) {
             data = calculateService.retrieveWeeklyData(ticker);
         }
-//    log.info("Receive this number of data {}", data.size());
+        log.info("Receive this number of data [{}] for [{}]", data.size(), ticker);
         SMAIndicatorResult smaIndicatorResult = new SMAIndicatorResult();
 
         smaIndicatorResult.setCode(ticker);
@@ -55,28 +89,20 @@ public class SMAIndicator {
                 .calculateMovingAverage(9, data);
         Map<String, Double> sma18 = calculateService
                 .calculateMovingAverage(18, data);
-        Map<String, Double> sma40 = calculateService
-                .calculateMovingAverage(40, data);
+//        Map<String, Double> sma40 = calculateService
+//                .calculateMovingAverage(40, data);
 
         smaIndicatorResult.setSma9(sma9);
         smaIndicatorResult.setSma18(sma18);
-        smaIndicatorResult.setSma40(sma40);
+//        smaIndicatorResult.setSma40(sma40);
 
         log.info("SMA 9 ==> {}", sma9.entrySet().size());
         log.info("SMA 18 ==> {}", sma18.entrySet().size());
-        log.info("SMA 40 ==> {}", sma40.entrySet().size());
+//        log.info("SMA 40 ==> {}", sma40.entrySet().size());
 
         int loopControl = Math.min(sma9.entrySet().size(), sma18.entrySet().size());
-        loopControl = Math.min(sma40.entrySet().size(), loopControl);
+//        loopControl = Math.min(sma40.entrySet().size(), loopControl);
 
-
-
-        int sma9Win = 0;
-        int sma9Lost = 0;
-        int sma12Win = 0;
-        int sma12Lost = 0;
-        int sma26Win = 0;
-        int sma26Lost = 0;
         Map<String, Double> generalData = calculateService.retrieveGeneralClosePrice(data);
 
         List<String> sortedKey = new ArrayList<>();
@@ -85,159 +111,200 @@ public class SMAIndicator {
                 .collect(Collectors.toList()).forEach(stringDoubleEntry -> sortedKey.add(stringDoubleEntry.getKey()));
         Collections.reverse(sortedKey);
 
-        // TODO them check gia sau nhung diem giao nhau cua cac duong trung binh
-        for (int i = 0; i< loopControl; i++) {
+        smaIndicatorResult.setLatestClosePrice(getLatestDate(generalData));
+        Map<String, Double> histogram = macdIndicator.calculateHistogram(data);
+        if (histogram.isEmpty()) return null;
+        for (int i = 0; i < loopControl; i++) {
             String date = sortedKey.get(i);
             Double sma9Value = sma9.get(date);
             Double sma18Value = sma18.get(date);
-            Double sma40Value = sma40.get(date);
-            if (Math.abs(sma9Value - sma18Value) < 250) {
-                Double currentPrice = generalData.get(date);
-                for (int j = i; j < i+5 && i+5< sortedKey.size() -1; j++) {
-                    String nextDate = sortedKey.get(j);
-                    Double nextDatePrice = generalData.get(nextDate);
-                    if(nextDatePrice > sma9Value) {
-                        log.info("Buy at the price [{}] : [{}] if possible", currentPrice, date.substring(0,10));
+//            Double sma40Value = sma40.get(date);
+            Double currentPrice = generalData.get(date);
+            if (Math.abs(sma9Value - sma18Value) < 1000) {
+                if (smaIndicatorResult.getBuyPrice() != null) break;
+                if (checkMACD(date, histogram)) {
+                    if (smaIndicatorResult.getBuyPrice() == null){
+                        log.info("[{}] ::: MACD matched buying [{}] : [{}]",ticker, date, currentPrice);
+                        AbstractMap.SimpleEntry<String, Double> buyPrice = new AbstractMap.SimpleEntry<>(date, currentPrice);
+                        if (!(smaIndicatorResult.getLatestClosePrice().values().stream().findFirst().get()
+                                > buyPrice.getValue() - 10000)) {
+                            AbstractMap.SimpleEntry chosenPrice = new AbstractMap.SimpleEntry(smaIndicatorResult.getLatestClosePrice().keySet().stream().findFirst().get(),
+                                    smaIndicatorResult.getLatestClosePrice().values().stream().findFirst().get());
+                            smaIndicatorResult.setBuyPrice(chosenPrice);
+                        }
                     }
-                    else break;
                 }
-//                if (currentPrice > sma9Value) {
-//                    log.info("Buy at the price [{}] : [{}] if possible", currentPrice, date.substring(0,10));
-//                }
             }
+
         }
-//        smaIndicatorResult.setLatestClosePrice(getLatestDate(generalData));
-
-//        for (String s : sortedKey) {
-//            String date = s;
-//            Double price = generalData.get(s);
-//
-//            double distantOne = -1;
-//            double distantTwo = -1;
-//            double distantThree = -1;
-//
-//            Map<String, Double> distantOfSMA9AndSMA18 = new HashMap<>(data.size(), 0.75f);
-//            Map<String, Double> distantOfSMA18AndSMA40 = new HashMap<>(data.size(), 0.75f);
-//            Map<String, Double> distantOfSMA40AndSMA9 = new HashMap<>(data.size(), 0.75f);
-//
-//            if (sma9.get(date) != null) {
-//                Double aDouble = sma9.get(date);
-//                if (aDouble < price) {
-//                    sma9Win++;
-//                } else {
-//                    sma9Lost++;
-//                }
-//                distantOne = price - aDouble;
-//                if (sma18.get(date) != null) {
-//                    distantOfSMA9AndSMA18.put(date, Math.abs(sma18.get(date) - aDouble));
-//                }
-//
-//                if (sma40.get(date) != null) {
-//                    distantOfSMA40AndSMA9.put(date, Math.abs(sma40.get(date) - aDouble));
-//                }
-//            }
-//
-//            if (sma18.get(date) != null) {
-//                Double aDouble = sma18.get(date);
-//                if (aDouble < price) {
-//                    sma12Win++;
-//                } else {
-//                    sma12Lost++;
-//                }
-//                distantTwo = price - aDouble;
-//                if (sma40.get(date) != null) {
-//                    distantOfSMA18AndSMA40.put(date, Math.abs(sma40.get(date) - aDouble));
-//                }
-//            }
-//
-//            if (sma40.get(date) != null) {
-//                Double aDouble = sma40.get(date);
-//                if (aDouble < price) {
-//                    sma26Win++;
-//                } else {
-//                    sma26Lost++;
-//                }
-//                distantThree = price - aDouble;
-//            }
-//
-//            distantOne = Math.abs(distantOne);
-//            distantTwo = Math.abs(distantTwo);
-//            distantThree = Math.abs(distantThree);
-//
-//            if (distantOfSMA9AndSMA18.get(date) != null
-//                    && distantOfSMA18AndSMA40.get(date) != null
-//                    && distantOfSMA40AndSMA9.get(date) != null) {
-//                if (distantOfSMA9AndSMA18.get(date) < 500 &&
-//                        distantOfSMA18AndSMA40.get(date) < 1000 &&
-//                        distantOfSMA40AndSMA9.get(date) < 1500)
-//                    log.info("SMA meets at: {} price: {}", date, price);
-//            }
-//
-//        }
-
-//        if (sma9Lost == 0) {
-//            sma9Lost = 1;
-//        }
-//
-//        if (sma12Lost == 0) {
-//            sma12Lost = 1;
-//        }
-//
-//        if (sma26Lost == 0) {
-//            sma26Lost = 1;
-//        }
-//        log.info("ticker {}| SMA 9 WIN/LOSE==>{}:{}", ticker, sma9Win, sma9Lost);
-//        if (sma9Win / sma9Lost >= 1.25) {
-//            smaIndicatorResult.setSma9Matched(true);
-//        }
-//
-//        log.info("ticker {}| SMA 18 WIN/LOSE==>{}:{}", ticker, sma12Win, sma12Lost);
-//        if (sma12Win / sma12Lost >= 1) {
-//            smaIndicatorResult.setSma18Matched(true);
-//
-//        }
-//
-//        log.info("ticker {}| SMA 40 WIN/LOSE==>{}:{}", ticker, sma26Win, sma26Lost);
-//        if (sma26Win / sma26Lost >= 0.75) {
-//            smaIndicatorResult.setSma40Matched(true);
-//        }
-//        calculateBuyAtPrice(smaIndicatorResult);
         return smaIndicatorResult;
 
     }
 
-    public void calculateBuyAtPrice(final SMAIndicatorResult smaIndicatorResult) {
-        double buyPrice;
-        String key = smaIndicatorResult.getLatestClosePrice().keySet().stream().findFirst().get();
-        Double closePrice = smaIndicatorResult.getLatestClosePrice().values().stream().findFirst()
-                .get();
-        if (smaIndicatorResult.isSma40Matched() && smaIndicatorResult.isSma18Matched()
-                && smaIndicatorResult.isSma9Matched()) {
-
-            buyPrice = Math.min(smaIndicatorResult.getSma9().get(key), closePrice);
-            smaIndicatorResult.setBuyPrice(buyPrice);
-            return;
-        } else {
-            smaIndicatorResult.setBuyPrice(null);
+    private void saveTickerDetail(TickerDetail td, String ticker, String group, String period) {
+        TickerDetailDocument tickerDetailDocument = new TickerDetailDocument();
+        tickerDetailDocument.setClose(td.getClose());
+        tickerDetailDocument.setOpen(td.getOpen());
+        tickerDetailDocument.setHigh(td.getHigh());
+        tickerDetailDocument.setLow(td.getLow());
+        tickerDetailDocument.setTradingDate(LocalDateTime.parse(td.getTradingDate(), formatter));
+        // TODO start back from here
+        tickerDetailDocument.setTicker(ticker);
+        tickerDetailDocument.setGroup(group);
+        tickerDetailDocument.setPeriod(period);
+        tickerDetailRepository.save(tickerDetailDocument);
+    }
+    public SMAIndicatorResult matchedSMAIndicator(String duration, final Sector sector) {
+        List<TickerDetail> data = new ArrayList<>();
+        String ticker = sector.getTicker();
+        if ("D".equalsIgnoreCase(duration)) {
+            data = calculateService.retrieveDataProperly(ticker, 365/2);
+//            data.forEach(tickerDetail -> saveTickerDetail(tickerDetail, sector.getTicker(), sector.getGroup(), "D"));
+        } else if ("W".equalsIgnoreCase(duration)) {
+            data = calculateService.retrieveWeeklyData(ticker);
         }
+        log.info("Receive this number of data [{}] for [{}]", data.size(), ticker);
+        SMAIndicatorResult smaIndicatorResult = new SMAIndicatorResult();
+
+        smaIndicatorResult.setCode(ticker);
+        Map<String, Double> sma9 = calculateService
+                .calculateMovingAverage(9, data);
+        Map<String, Double> sma18 = calculateService
+                .calculateMovingAverage(18, data);
+//        Map<String, Double> sma40 = calculateService
+//                .calculateMovingAverage(40, data);
+
+        smaIndicatorResult.setSma9(sma9);
+        smaIndicatorResult.setSma18(sma18);
+//        smaIndicatorResult.setSma40(sma40);
+
+        log.info("SMA 9 ==> {}", sma9.entrySet().size());
+        log.info("SMA 18 ==> {}", sma18.entrySet().size());
+//        log.info("SMA 40 ==> {}", sma40.entrySet().size());
+
+        int loopControl = Math.min(sma9.entrySet().size(), sma18.entrySet().size());
+//        loopControl = Math.min(sma40.entrySet().size(), loopControl);
+
+        Map<String, Double> generalData = calculateService.retrieveGeneralClosePrice(data);
+
+        List<String> sortedKey = new ArrayList<>();
+        generalData.entrySet().stream()
+                .sorted(Comparator.comparing(o -> LocalDate.parse(o.getKey(), formatter)))
+                .collect(Collectors.toList()).forEach(stringDoubleEntry -> sortedKey.add(stringDoubleEntry.getKey()));
+        Collections.reverse(sortedKey);
+
+        smaIndicatorResult.setLatestClosePrice(getLatestDate(generalData));
+        Map<String, Double> histogram = macdIndicator.calculateHistogram(data);
+        if (histogram.isEmpty()) return null;
+        for (int i = 0; i < loopControl; i++) {
+            String date = sortedKey.get(i);
+            Double sma9Value = sma9.get(date);
+            Double sma18Value = sma18.get(date);
+//            Double sma40Value = sma40.get(date);
+            Double currentPrice = generalData.get(date);
+            if (Math.abs(sma9Value - sma18Value) < 1000) {
+                if (smaIndicatorResult.getBuyPrice() != null) break;
+                if (checkMACD(date, histogram)) {
+                    if (smaIndicatorResult.getBuyPrice() == null){
+                        log.info("[{}] ::: MACD matched buying [{}] : [{}]", ticker, date, currentPrice);
+                        AbstractMap.SimpleEntry<String, Double> buyPrice = new AbstractMap.SimpleEntry<>(date, currentPrice);
+                        if (!(smaIndicatorResult.getLatestClosePrice().values().stream().findFirst().get()
+                                > buyPrice.getValue() - 10000)) {
+                            AbstractMap.SimpleEntry chosenPrice = new AbstractMap.SimpleEntry(smaIndicatorResult.getLatestClosePrice().keySet().stream().findFirst().get(),
+                                    smaIndicatorResult.getLatestClosePrice().values().stream().findFirst().get());
+                            smaIndicatorResult.setBuyPrice(chosenPrice);
+                        }
+                    }
+                }
+            }
+
+        }
+        return smaIndicatorResult;
+
+    }
+    public  List<SMAIndicatorResult> scanAll(final List<Integer> sectorIds) throws IOException {
+         List<SMAIndicatorResult>finalOutput = new ArrayList<>();
+//        for (int i = 1; i < 30; i++) {
+        for (int temp = 0; temp < sectorIds.size(); temp++) {
+            final List<Sector> tickerGroupBySector = helperService.getTickerGroupBySector(sectorIds.get(temp));
+            if (!tickerGroupBySector.isEmpty()) {
+                int sizeOfSector = tickerGroupBySector.size();
+                log.info("Number of tickers {}", sizeOfSector);
+
+                final List<SMAIndicatorResult> results = new ArrayList<>();
+                List<Sector> sectorList = tickerGroupBySector.stream().sorted((o1, o2) -> (int) (o1.getCapital() - o2.getCapital())).collect(Collectors.toList());
+                int percentile = (int) Math.ceil(0.5 * sectorList.size()) - 1;
+                Sector standard = sectorList.get(percentile);
+
+                for (int j = 0; j < sizeOfSector; j=j+1) {
+                    Sector sector = tickerGroupBySector.get(j);
+                    log.info("Ticker [{}] | Group [{}] is under processing",
+                            sector.getTicker(), sector.getGroup());
+                    if (sector.getCapital() < standard.getCapital()) {
+                        log.info("Ticker [{}] has small capital < avg: [{}] < [{}]", sector.getTicker(), sector.getCapital(), standard.getCapital());
+                        continue;
+                    }
+                    SMAIndicatorResult smaIndicatorResult = matchedSMAIndicator("D", sector.getTicker());
+                    if (smaIndicatorResult!=null) {
+                        smaIndicatorResult.getSma9().clear();
+                        smaIndicatorResult.getSma18().clear();
+                        if (smaIndicatorResult.getBuyPrice() != null) {
+                            results.add(smaIndicatorResult);
+                        }
+                    }
+                }
+                finalOutput.addAll(results);
+            }
+}
+        writeToFile(finalOutput);
+        return finalOutput;
     }
 
+
     public List<SMAIndicatorResult> scanByGroup(String duration, int groupId) {
-        final List<String> tickerGroupBySector = helperService.getTickerGroupBySector(groupId);
+        final List<Sector> tickerGroupBySector = helperService.getTickerGroupBySector(groupId);
         log.info("Ticker belonging to group {}", tickerGroupBySector);
         log.info("Number of tickers {}", tickerGroupBySector.size());
         final List<SMAIndicatorResult> results = new ArrayList<>();
 
         for (int i = 0; i < tickerGroupBySector.size(); i++) {
-            SMAIndicatorResult smaIndicatorResult = matchedSMAIndicator(duration, tickerGroupBySector.get(i));
+            SMAIndicatorResult smaIndicatorResult = matchedSMAIndicator(duration, tickerGroupBySector.get(i).getTicker());
             smaIndicatorResult.getSma9().clear();
             smaIndicatorResult.getSma18().clear();
-            smaIndicatorResult.getSma40().clear();
+//            smaIndicatorResult.getSma40().clear();
             if (smaIndicatorResult.getBuyPrice() != null) {
                 results.add(smaIndicatorResult);
             }
         }
         return results;
+    }
 
+    private boolean checkMACD(String date, Map<String, Double> histogram) {
+        LocalDateTime localDateTime = LocalDateTime.parse(date, formatter);
+        LocalDateTime oneDayBefore = localDateTime.minus(1, ChronoUnit.DAYS);
+        LocalDateTime twoDaysBefore = localDateTime.minus(2, ChronoUnit.DAYS);
+        LocalDateTime threeDaysBefore = localDateTime.minus(3, ChronoUnit.DAYS);
+        LocalDateTime fourDaysBefore = localDateTime.minus(4, ChronoUnit.DAYS);
+        LocalDateTime fiveDaysBefore = localDateTime.minus(5, ChronoUnit.DAYS);
+        int shouldBuy = 0;
+        int shouldSell = 0;
+
+        List<LocalDateTime> localDates = Arrays.asList(oneDayBefore, twoDaysBefore, threeDaysBefore, fourDaysBefore, fiveDaysBefore);
+//        Set<LocalDateTime> collect = localDates.stream().filter(localDateTime1 -> !histogram.containsKey(localDateTime1.format(formatter))).collect(Collectors.toSet());
+
+        Double currentHistogram = histogram.get(date);
+        if (currentHistogram != null && Math.abs(currentHistogram) > 100) return false;
+
+        for (int i = 0; i < 5; i++) {
+            String goodFormat = localDates.get(i).format(formatter);
+            if (histogram.get(goodFormat) != null) {
+                if (histogram.get(goodFormat) >= 0) {
+                    shouldSell++;
+                } else shouldBuy++;
+            }
+
+        }
+//        log.info("date - histogram - buy - sell: [{}] - [{}] - [{}] - [{}]", date, currentHistogram, shouldBuy, shouldSell);
+        return shouldBuy > shouldSell && shouldBuy + shouldSell >= 4;
     }
 }
