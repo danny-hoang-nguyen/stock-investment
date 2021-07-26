@@ -21,4 +21,5 @@ public class TickerForCalculation {
     private BigInteger volume;
     private LocalDateTime tradingDate;
     private String period;
+    private String sector;
 }

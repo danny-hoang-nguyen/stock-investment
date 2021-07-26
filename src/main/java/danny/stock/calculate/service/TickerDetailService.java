@@ -26,7 +26,7 @@ public class TickerDetailService {
     @Autowired
     private TcbsClient tcbsClient;
 
-    public List<TickerDetail> findTickerDetailBetweenTimeRange(int numberOfSessions, String ticker, String period) {
+    public List<TickerDetail> findTickerDetailBetweenTimeRange(int numberOfSessions, String ticker, String period, String sector) {
         LocalDateTime to = LocalDateTime.now();
         LocalDateTime from = to.minus(numberOfSessions, ChronoUnit.DAYS);
 
@@ -45,7 +45,7 @@ public class TickerDetailService {
                 long toDateInSecond = Util.convertDateToSecond(LocalDateTime.now());
                 BarsLongTerm stocks = tcbsClient.getStockInfo(ticker, "D", fromDateInSecond, toDateInSecond);
                 log.info("New data retrieved = [{}]", stocks.getData().size());
-                saveNewStockData(ticker, stocks.getData(), period);
+                saveNewStockData(ticker, stocks.getData(), period, sector);
                 return stocks.getData().stream().peek(tickerDetail -> tickerDetail.setCode(ticker)).collect(Collectors.toList());
             }
 
@@ -53,7 +53,7 @@ public class TickerDetailService {
             long toDateInSecond = Util.convertDateToSecond(LocalDateTime.now());
             BarsLongTerm stocks = tcbsClient.getStockInfo(ticker, "D", fromDateInSecond, toDateInSecond);
             log.info("New data retrieved = [{}]", stocks.getData().size());
-            saveNewStockData(ticker, stocks.getData(), period);
+            saveNewStockData(ticker, stocks.getData(), period, sector);
             result.addAll(stocks.getData().stream().peek(tickerDetail -> tickerDetail.setCode(ticker)).collect(Collectors.toList()));
         }
         return result;
@@ -72,7 +72,8 @@ public class TickerDetailService {
         return tickerDetail;
     }
 
-    private TickerForCalculation createFromTickerDetail(final String ticker, final TickerDetail tickerDetail, final String period) {
+    private TickerForCalculation createFromTickerDetail(final String ticker, final TickerDetail tickerDetail, final String period,
+                                                        final String sector) {
         TickerForCalculation tickerForCalculation = new TickerForCalculation();
         tickerForCalculation.setPeriod(period);
         tickerForCalculation.setTradingDate(Util.convertStringToTime(tickerDetail.getTradingDate()));
@@ -82,12 +83,13 @@ public class TickerDetailService {
         tickerForCalculation.setClose(tickerDetail.getClose());
         tickerForCalculation.setVolume(tickerDetail.getVolume());
         tickerForCalculation.setTicker(ticker);
+        tickerForCalculation.setSector(sector);
         return tickerForCalculation;
     }
 
-    private void saveNewStockData(String ticker, List<TickerDetail> tickerDetails, String period ) {
+    private void saveNewStockData(String ticker, List<TickerDetail> tickerDetails, String period, String sector) {
         for (TickerDetail tickerDetail: tickerDetails) {
-            TickerForCalculation fromTickerDetail = createFromTickerDetail(ticker, tickerDetail, period);
+            TickerForCalculation fromTickerDetail = createFromTickerDetail(ticker, tickerDetail, period, sector);
             tickerDetailRepository.save(fromTickerDetail);
         }
     }

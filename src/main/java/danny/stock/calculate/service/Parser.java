@@ -1,7 +1,9 @@
 package danny.stock.calculate.service;
 
 import danny.stock.calculate.document.TickerFigureDocument;
+import danny.stock.calculate.model.cp68.SectorFigure;
 import danny.stock.calculate.model.vietstock.TickerFigure;
+import danny.stock.calculate.repository.Cp68SectorFigureRepository;
 import danny.stock.calculate.repository.TickerFigureRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
@@ -12,6 +14,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.text.NumberFormat;
+import java.text.ParseException;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -51,6 +55,11 @@ public class Parser {
     @Autowired
     private TickerFigureRepository tickerFigureRepository;
 
+    @Autowired
+    private Cp68SectorFigureRepository sectorFigureRepository;
+
+    private List<SectorFigure> sectorFigures = new ArrayList<>();
+
     public List<TickerFigure> retrieveSectorData() throws IOException {
         // [{0=STT, 1=Nhóm Ngành, 2=+/-, 3=EPS, 4=PE, 5=ROA, 6=ROE, 7=Giá TB, 8=Giá SS, 9=P/B, 10=Beta, 11=Tổng KL, 12=NN SởHữu, 13=Vốn TT (Tỷ)}]
         List<String> label = new ArrayList<>();
@@ -85,8 +94,40 @@ public class Parser {
                 if (i + adx == content.size()) break;
                 strings.add(content.get(adx + i).text());
             }
+            String stt = strings.get(getIdxOfPropertyFromSector(SO_THU_TU, SECTOR));
             String code = strings.get(getIdxOfPropertyFromSector(NHOM_NGANH, SECTOR));
+            String tanggiam = strings.get(getIdxOfPropertyFromSector(TANG_GIAM, SECTOR));
+            String eps = strings.get(getIdxOfPropertyFromSector(EPS, SECTOR));
+            String pe = strings.get(getIdxOfPropertyFromSector(PE, SECTOR));
+            String roa = strings.get(getIdxOfPropertyFromSector(ROA, SECTOR));
+            String roe = strings.get(getIdxOfPropertyFromSector(ROE, SECTOR));
+            String giatb = strings.get(getIdxOfPropertyFromSector(GIA_TRUNG_BINH, SECTOR));
+            String giasosach = strings.get(getIdxOfPropertyFromSector(GIA_SO_SACH, SECTOR));
+            String giathatchiagiasosach = strings.get(getIdxOfPropertyFromSector(GIA_THAT_CHIA_GIA_SO_SACH, SECTOR));
+            String beta = strings.get(getIdxOfPropertyFromSector(BETA, SECTOR));
+            String tongkhoiluong = strings.get(getIdxOfPropertyFromSector(TONG_KL, SECTOR));
+            String nnsohuu = strings.get(getIdxOfPropertyFromSector(NN_SO_HUU, SECTOR));
+            String vonthitruong = strings.get(getIdxOfPropertyFromSector(VON_THI_TRUONG, SECTOR));
+
             String tenNganh = code.substring(code.indexOf("^") + 1);
+
+            SectorFigure sectorFigure = new SectorFigure();
+            sectorFigure.setStt(stt);
+            sectorFigure.setTennganh(tenNganh);
+            sectorFigure.setTanggiam(tanggiam);
+            sectorFigure.setEps(eps);
+            sectorFigure.setPe(pe);
+            sectorFigure.setRoa(roa);
+            sectorFigure.setRoe(roe);
+            sectorFigure.setGiatb(giatb);
+            sectorFigure.setGiasosach(giasosach);
+            sectorFigure.setPb(giathatchiagiasosach);
+            sectorFigure.setBeta(beta);
+            sectorFigure.setTongkl(tongkhoiluong);
+            sectorFigure.setNnsohuu(nnsohuu);
+            sectorFigure.setVonthitruong(vonthitruong);
+            sectorFigureRepository.save(sectorFigure);
+
 
             log.info("=== Enter sector [{}] ===", tenNganh);
             List<Vector> tickerAndRoe = getTickerAndRoe(tenNganh);
@@ -95,6 +136,7 @@ public class Parser {
                 TickerFigure tickerFigure = extractFromVietStock(tickerName);
                 tickerFigure.setRoe((Double) c.get(1));
                 tickerFigure.setCode(tickerName);
+                tickerFigure.setSector(tenNganh);
                 veryFinalResult.add(tickerFigure);
                 TickerFigureDocument fromTickerFigure = createFromTickerFigure(tickerFigure);
                 tickerFigureRepository.save(fromTickerFigure);
@@ -141,24 +183,11 @@ public class Parser {
             String code = strings.get(getIdxOfPropertyFromSector(NHOM_NGANH, SECTOR));
             String tenNganh = code.substring(code.indexOf("^") + 1);
             sectors.add(tenNganh);
-
-//            log.info("=== Enter sector [{}] ===", tenNganh);
-//            List<Vector> tickerAndRoe = getTickerAndRoe(tenNganh);
-//            for (Vector c : tickerAndRoe) {
-//                String tickerName = (String) c.get(0);
-//                TickerFigure tickerFigure = extractFromVietStock(tickerName);
-//                tickerFigure.setRoe((Double) c.get(1));
-//                tickerFigure.setCode(tickerName);
-//                sectors.add(tickerFigure);
-//                TickerFigureDocument fromTickerFigure = createFromTickerFigure(tickerFigure);
-//                tickerFigureRepository.save(fromTickerFigure);
-//            }
-//            log.info("=== [{}] tickers were processed ===", tickerAndRoe.size());
         }
         return sectors;
     }
 
-    public  List<Vector> getTickerAndRoe(String sector) throws IOException {
+    public List<Vector> getTickerAndRoe(String sector) throws IOException {
         // [{0=STT, 1=Mã CK, 2=+/-, 3=EPS, 4=PE, 5=ROA, 6=ROE, 7=Giá SS, 8=P/B, 9=Beta, 10=Tổng KL, 11=NN SởHữu, 12=Vốn TT (Tỷ)}]
         List<String> label = new ArrayList<>();
         String url = HTTP_WWW_COPHIEU_68_VN_CATEGORYLIST_DETAIL_PHP_CATEGORY + sector;
@@ -180,7 +209,7 @@ public class Parser {
         int size = label.size();
 
         if (TICKER_HEADERS.isEmpty()) {
-            for (int i =0; i< size;i++) {
+            for (int i = 0; i < size; i++) {
                 TICKER_HEADERS.put(i, label.get(i));
             }
         }
@@ -199,18 +228,17 @@ public class Parser {
             String roe = strings.get(getIdxOfPropertyFromSector(ROE, TICKER));
 
             double roeInNumber = convertROEFromStringToPercentage(roe);
-//            log.info("ticker - ROE ::: [{}]  - [{}]", code, roeInNumber);
 
             Vector v = new Vector();
-            v.add(0,code);
-            v.add(1,roeInNumber);
+            v.add(0, code);
+            v.add(1, roeInNumber);
             tickerAndRoe.add(v);
         }
         return tickerAndRoe;
     }
 
     public TickerFigure extractFromVietStock(String ticker) throws IOException {
-        Document doc = Jsoup.connect(HTTP_FINANCE_VIETSTOCK_VN + ticker+ TAI_CHINH).get();
+        Document doc = Jsoup.connect(HTTP_FINANCE_VIETSTOCK_VN + ticker + TAI_CHINH).get();
         Elements elementsByClass = doc.getElementsByClass("col-xs-12 col-sm-4 col-md-4 col-c-last");
         int movingIndex = 0;
         TickerFigure tickerFigure = new TickerFigure();
@@ -219,7 +247,6 @@ public class Parser {
             Elements key = e.getElementsByClass("p8");
 
             for (Element figure : value) {
-//                log.info("Current figure [{}]", figure.text());
                 String label = key.text().substring(movingIndex, key.text().indexOf(figure.text(), movingIndex));
                 movingIndex = movingIndex + label.length() + figure.text().length();
                 createTickerFigure(label.trim(), figure.text(), tickerFigure);
@@ -235,34 +262,34 @@ public class Parser {
     }
 
     private double convertROEFromStringToPercentage(String roe) {
-        String number = roe.substring(0, roe.indexOf("%")).replaceAll(",","");
+        String number = roe.substring(0, roe.indexOf("%")).replaceAll(",", "");
         return Double.parseDouble(number) / 100;
     }
 
     private void createTickerFigure(String key, String value, TickerFigure tickerFigure) {
         switch (key) {
             case "EPS*":
-                tickerFigure.setEps(value);
+                tickerFigure.setEps(handleNumber(value));
                 break;
 
             case "P/E":
-                tickerFigure.setPOverE(value);
+                tickerFigure.setPe(handleNumber(value));
                 break;
 
             case "F P/E":
-                tickerFigure.setFAndPOverE(value);
+                tickerFigure.setFpe(handleNumber(value));
                 break;
 
             case "BVPS":
-                tickerFigure.setBvps(value);
+                tickerFigure.setBvps(handleNumber(value));
                 break;
 
             case "P/B":
-                tickerFigure.setPOverB(value);
+                tickerFigure.setPb(handleNumber(value));
                 break;
 
             default:
-                log.info("Not found property [{}]", key);
+                log.error("Not found property [{}] for value [{}]", key, value);
 
         }
     }
@@ -272,11 +299,22 @@ public class Parser {
         tickerFigureDocument.setBvps(tickerFigure.getBvps());
         tickerFigureDocument.setCode(tickerFigure.getCode());
         tickerFigureDocument.setEps(tickerFigure.getEps());
-        tickerFigureDocument.setPOverE(tickerFigure.getPOverE());
-        tickerFigureDocument.setFAndPOverE(tickerFigure.getFAndPOverE());
-        tickerFigureDocument.setPOverB(tickerFigure.getPOverB());
+        tickerFigureDocument.setPe(tickerFigure.getPe());
+        tickerFigureDocument.setFpe(tickerFigure.getFpe());
+        tickerFigureDocument.setPb(tickerFigure.getPb());
         tickerFigureDocument.setRoe(tickerFigure.getRoe());
         tickerFigureDocument.setCreated(LocalDateTime.now());
+        tickerFigureDocument.setSector(tickerFigure.getSector());
         return tickerFigureDocument;
+    }
+
+    private Double handleNumber(String value) {
+        Number figure = -1.0;
+        try {
+            figure = NumberFormat.getNumberInstance(Locale.US).parse(value);
+        } catch (ParseException e) {
+            log.error("Error parsing figure [{}] for value [{}]", figure, value);
+        }
+        return figure.doubleValue();
     }
 }

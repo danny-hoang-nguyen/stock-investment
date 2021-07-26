@@ -38,7 +38,7 @@ public class TickerDetailController {
                 String code = (String) v.get(0);
                 log.info("Code ===> [{}]", code);
 
-                tickerDetailService.findTickerDetailBetweenTimeRange(day, code, period);
+                tickerDetailService.findTickerDetailBetweenTimeRange(day, code, period, s);
             }
         }
         return ResponseEntity.status(HttpStatus.OK).build();
