@@ -1,5 +1,7 @@
 package danny.stock.calculate.controller;
 
+import danny.stock.calculate.concurrent.AsyncService;
+import danny.stock.calculate.model.tcb.TickerDetail;
 import danny.stock.calculate.service.Parser;
 import danny.stock.calculate.service.TickerDetailService;
 import lombok.extern.slf4j.Slf4j;
@@ -24,6 +26,8 @@ public class TickerDetailController {
 
     @Autowired
     private Parser parser;
+    @Autowired
+    private AsyncService asyncService;
 
     private static final String HALF_YEAR = "182";
     private static final String DAY = "D";
@@ -38,11 +42,17 @@ public class TickerDetailController {
                 String code = (String) v.get(0);
                 log.info("Code ===> [{}]", code);
 
-                tickerDetailService.findTickerDetailBetweenTimeRange(day, code, period, s);
+                List<TickerDetail> tickerDetails = tickerDetailService.findTickerDetailBetweenTimeRange(day, code, period, s);
             }
         }
         return ResponseEntity.status(HttpStatus.OK).build();
-//        return ResponseEntity.of(Optional.of(tickerDetailService.findTickerDetailBetweenTimeRange(day, ticker, period)));
+    }
+
+    @GetMapping("/async")
+    ResponseEntity<?> getAsync(@RequestParam(defaultValue = HALF_YEAR) int day, @RequestParam(defaultValue = DAY) String period) throws IOException {
+
+        asyncService.get();
+        return ResponseEntity.status(HttpStatus.OK).build();
     }
 
 }
