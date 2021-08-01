@@ -30,10 +30,11 @@ public class TickerDetailController {
     private AsyncService asyncService;
 
     private static final String HALF_YEAR = "182";
+    private static final String A_YEAR = "365";
     private static final String DAY = "D";
 
     @GetMapping("/ticker")
-    ResponseEntity<?> getTickerDataWithCachedMechanism(@RequestParam(defaultValue = HALF_YEAR) int day, @RequestParam(defaultValue = DAY) String period) throws IOException {
+    ResponseEntity<?> getTickerDataWithCachedMechanism(@RequestParam(defaultValue = A_YEAR) int day, @RequestParam(defaultValue = DAY) String period) throws IOException {
         List<String> names = parser.retrieveJustSectorName();
         for (String s : names) {
             List<Vector> tickerAndRoe = parser.getTickerAndRoe(s);
@@ -42,14 +43,14 @@ public class TickerDetailController {
                 String code = (String) v.get(0);
                 log.info("Code ===> [{}]", code);
 
-                List<TickerDetail> tickerDetails = tickerDetailService.findTickerDetailBetweenTimeRange(day, code, period, s);
+                tickerDetailService.findTickerDetailBetweenTimeRange(day, code, period, s);
             }
         }
         return ResponseEntity.status(HttpStatus.OK).build();
     }
 
     @GetMapping("/async")
-    ResponseEntity<?> getAsync(@RequestParam(defaultValue = HALF_YEAR) int day, @RequestParam(defaultValue = DAY) String period) throws IOException {
+    ResponseEntity<?> getAsync(@RequestParam(defaultValue = HALF_YEAR) int day, @RequestParam(defaultValue = DAY) String period) {
 
         asyncService.get();
         return ResponseEntity.status(HttpStatus.OK).build();

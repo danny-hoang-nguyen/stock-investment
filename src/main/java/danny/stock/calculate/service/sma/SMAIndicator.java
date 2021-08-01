@@ -224,26 +224,27 @@ public class SMAIndicator {
     }
     public  List<SMAIndicatorResult> scanAll(final List<Integer> sectorIds) throws IOException {
          List<SMAIndicatorResult>finalOutput = new ArrayList<>();
-//        for (int i = 1; i < 30; i++) {
-        for (int temp = 0; temp < sectorIds.size(); temp++) {
-            final List<Sector> tickerGroupBySector = helperService.getTickerGroupBySector(sectorIds.get(temp));
+        for (int i = 1; i < 30; i++) {
+//        for (int temp = 0; temp < sectorIds.size(); temp++) {
+//            final List<Sector> tickerGroupBySector = helperService.getTickerGroupBySector(sectorIds.get(temp));
+            final List<Sector> tickerGroupBySector = helperService.getTickerGroupBySector(i);
             if (!tickerGroupBySector.isEmpty()) {
                 int sizeOfSector = tickerGroupBySector.size();
                 log.info("Number of tickers {}", sizeOfSector);
 
                 final List<SMAIndicatorResult> results = new ArrayList<>();
-                List<Sector> sectorList = tickerGroupBySector.stream().sorted((o1, o2) -> (int) (o1.getCapital() - o2.getCapital())).collect(Collectors.toList());
-                int percentile = (int) Math.ceil(0.5 * sectorList.size()) - 1;
-                Sector standard = sectorList.get(percentile);
+//                List<Sector> sectorList = tickerGroupBySector.stream().sorted((o1, o2) -> (int) (o1.getCapital() - o2.getCapital())).collect(Collectors.toList());
+//                int percentile = (int) Math.ceil(0.5 * sectorList.size()) - 1;
+//                Sector standard = sectorList.get(percentile);
 
                 for (int j = 0; j < sizeOfSector; j=j+1) {
                     Sector sector = tickerGroupBySector.get(j);
                     log.info("Ticker [{}] | Group [{}] is under processing",
                             sector.getTicker(), sector.getGroup());
-                    if (sector.getCapital() < standard.getCapital()) {
-                        log.info("Ticker [{}] has small capital < avg: [{}] < [{}]", sector.getTicker(), sector.getCapital(), standard.getCapital());
-                        continue;
-                    }
+//                    if (sector.getCapital() < standard.getCapital()) {
+//                        log.info("Ticker [{}] has small capital < avg: [{}] < [{}]", sector.getTicker(), sector.getCapital(), standard.getCapital());
+//                        continue;
+//                    }
                     SMAIndicatorResult smaIndicatorResult = matchedSMAIndicator("D", sector.getTicker());
                     if (smaIndicatorResult!=null) {
                         smaIndicatorResult.getSma9().clear();

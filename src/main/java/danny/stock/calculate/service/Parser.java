@@ -48,8 +48,8 @@ public class Parser {
     private static final String TICKER = "ticker";
     private static final String HTTP_WWW_COPHIEU_68_VN_CATEGORYLIST_PHP = "http://www.cophieu68.vn/categorylist.php";
     private static final String HTTP_WWW_COPHIEU_68_VN_CATEGORYLIST_DETAIL_PHP_CATEGORY = "http://www.cophieu68.vn/categorylist_detail.php?category=%5E";
-    private static final String HTTP_FINANCE_VIETSTOCK_VN = "http://finance.vietstock.vn/";
-    private static final String TAI_CHINH = "/tai-chinh.htm";
+    public static final String HTTP_FINANCE_VIETSTOCK_VN = "http://finance.vietstock.vn/";
+    public static final String TAI_CHINH = "/tai-chinh.htm";
 
 
     @Autowired
