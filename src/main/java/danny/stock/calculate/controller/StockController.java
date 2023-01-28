@@ -6,21 +6,19 @@ import danny.stock.calculate.service.HelperService;
 import danny.stock.calculate.service.macd.MacdIndicator;
 import danny.stock.calculate.service.sma.SMAIndicator;
 import danny.stock.calculate.util.Util;
+import java.io.IOException;
+import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.io.IOException;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.stream.Collectors;
 
 @RestController
 public class StockController {
@@ -48,6 +46,11 @@ public class StockController {
     @GetMapping("/scan/{sectorIds}")
     ResponseEntity< List<SMAIndicatorResult>> findOutPotentialTickers(@PathVariable List<Integer> sectorIds) throws IOException {
         return ResponseEntity.of(Optional.of(smaIndicator.scanAll(sectorIds)));
+    }
+
+    @GetMapping("/scan-all/")
+    ResponseEntity<Set<SMAIndicatorResult>> findOutPotentialTickers() throws IOException {
+        return ResponseEntity.of(Optional.of(smaIndicator.scanAll()));
     }
 
     @GetMapping("/sectors")

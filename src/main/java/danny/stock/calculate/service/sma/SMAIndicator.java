@@ -58,7 +58,7 @@ public class SMAIndicator {
         return Map.of(stringDoubleEntry.getKey(), stringDoubleEntry.getValue());
     }
 
-    private void writeToFile(List<SMAIndicatorResult> result) throws IOException {
+    private void writeToFile(Set<SMAIndicatorResult> result) throws IOException {
         RandomAccessFile stream = new RandomAccessFile("ouput_"+ Instant.now().getEpochSecond(), "rw");
         FileChannel channel = stream.getChannel();
 
@@ -89,19 +89,19 @@ public class SMAIndicator {
                 .calculateMovingAverage(9, data);
         Map<String, Double> sma18 = calculateService
                 .calculateMovingAverage(18, data);
-//        Map<String, Double> sma40 = calculateService
-//                .calculateMovingAverage(40, data);
+        Map<String, Double> sma40 = calculateService
+                .calculateMovingAverage(40, data);
 
         smaIndicatorResult.setSma9(sma9);
         smaIndicatorResult.setSma18(sma18);
-//        smaIndicatorResult.setSma40(sma40);
+        smaIndicatorResult.setSma40(sma40);
 
         log.info("SMA 9 ==> {}", sma9.entrySet().size());
         log.info("SMA 18 ==> {}", sma18.entrySet().size());
-//        log.info("SMA 40 ==> {}", sma40.entrySet().size());
+        log.info("SMA 40 ==> {}", sma40.entrySet().size());
 
         int loopControl = Math.min(sma9.entrySet().size(), sma18.entrySet().size());
-//        loopControl = Math.min(sma40.entrySet().size(), loopControl);
+        loopControl = Math.min(sma40.entrySet().size(), loopControl);
 
         Map<String, Double> generalData = calculateService.retrieveGeneralClosePrice(data);
 
@@ -257,10 +257,33 @@ public class SMAIndicator {
                 finalOutput.addAll(results);
             }
 }
-        writeToFile(finalOutput);
+//        writeToFile(finalOutput);
         return finalOutput;
     }
 
+
+    public Set<SMAIndicatorResult> scanAll() throws IOException {
+        Set<SMAIndicatorResult> finalOutput = new HashSet<>();
+
+        final List<SMAIndicatorResult> results = new ArrayList<>();
+        var tickerForCalculations = tickerDetailRepository.findDistinctTickers();
+        for (String t : tickerForCalculations) {
+            log.info("Processing ticker {}", t);
+            SMAIndicatorResult smaIndicatorResult = matchedSMAIndicator("D", t);
+            if (smaIndicatorResult != null) {
+                smaIndicatorResult.getSma9().clear();
+                smaIndicatorResult.getSma18().clear();
+                smaIndicatorResult.getSma40().clear();
+                if (smaIndicatorResult.getBuyPrice() != null) {
+                    results.add(smaIndicatorResult);
+                }
+            }
+            finalOutput.addAll(results);
+        }
+
+        writeToFile(finalOutput);
+        return finalOutput;
+    }
 
     public List<SMAIndicatorResult> scanByGroup(String duration, int groupId) {
         final List<Sector> tickerGroupBySector = helperService.getTickerGroupBySector(groupId);
@@ -272,7 +295,7 @@ public class SMAIndicator {
             SMAIndicatorResult smaIndicatorResult = matchedSMAIndicator(duration, tickerGroupBySector.get(i).getTicker());
             smaIndicatorResult.getSma9().clear();
             smaIndicatorResult.getSma18().clear();
-//            smaIndicatorResult.getSma40().clear();
+            smaIndicatorResult.getSma40().clear();
             if (smaIndicatorResult.getBuyPrice() != null) {
                 results.add(smaIndicatorResult);
             }

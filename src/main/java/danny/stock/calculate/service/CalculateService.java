@@ -218,6 +218,7 @@ public class CalculateService {
                 BigDecimal oneMinusK = BigDecimal.ONE.subtract(k);
                 BigDecimal currentPriceMultiplyK = data.get(tradingDate).multiply(k);
                 BigDecimal previousEMA = result.get(realData.get(i - 1).getTradingDate());
+                if(previousEMA == null) continue;
                 BigDecimal emaToday = currentPriceMultiplyK
                         .add(previousEMA.multiply(oneMinusK));
 //                log.info("Signal at [{}] ===> [{}]", tradingDate, emaToday.doubleValue());

@@ -268,7 +268,7 @@ public class Parser {
 
     private void createTickerFigure(String key, String value, TickerFigure tickerFigure) {
         switch (key) {
-            case "EPS*":
+            case "EPS":
                 tickerFigure.setEps(handleNumber(value));
                 break;
 
